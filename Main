@@ -1,16 +1,143 @@
-try:
-    from pyfirmata import Arduino, util
-except:
-    import pip
-    pip.main(['install','pyfirmata'])
-    from pyfirmata import Arduino, util
 import time
+import pymata4
+from pymata4 import pymata4
 
-board = Arduino('COM(Port') #Get Port Number from Device Manage
+board = pymata4.Pymata4()
 
-iterator = util.Iterator(board)
-iterator.start()
+class TempSection:
+    
+    @staticmethod
+    def pin_config(my_board):
+        # Use the provided pin numbers directly, no need to assign them to variables
+        my_board.set_pin_mode_digital_input(14)  # Max_6675_SO
+        my_board.set_pin_mode_digital_output(15)  # Max_6675_CS
+        my_board.set_pin_mode_digital_output(16)  # MAX_6675_SCK
+    
+    @staticmethod
+    def read_temp(my_board):
+        cs = 15
+        so = 14
+        sck = 16
+        
+        my_board.digital_write(cs, 0)
+        time.sleep(0.002)
+        my_board.digital_write(cs, 1)
+        time.sleep(0.22)
+        
+        my_board.digital_write(cs, 0)
+        my_board.digital_write(sck, 0)
+        
+        value = 0
+        X = 0
+        for i in range(11, -1, -1):
+            my_board.digital_write(sck, 1)
+            read_data = my_board.digital_read(so)
+            if read_data == 1:
+                X = 1
+            if read_data == 0:
+                X = 0
+            value += X * (2 ** i)
+            my_board.digital_write(sck, 0)
+        
+        my_board.digital_write(sck, 1)
+        error_tc = my_board.digital_read(so)
+        my_board.digital_write(sck, 0)
+        
+        for i in range(2):
+            my_board.digital_write(sck, 1)
+            time.sleep(0.001)
+            my_board.digital_write(sck, 0)
+        
+        my_board.digital_write(cs, 1)
+        
+        temp = value * 0.25
+        
+        return temp
 
-Temp_In = board.get_pin('a.0.i')
 
 
+class TempCompare:
+
+    @staticmethod
+    def change_setpoint(my_board, setpoint):
+        inc = 2
+        dec = 3
+        
+        Y = 0
+        Z = 0
+        read_data_up = my_board.digital_read(inc)
+        if read_data_up == 1:
+            Y = 1
+        if read_data_up == 0:
+            Y = 0
+        read_data_down = my_board.digital_read(dec)
+        if read_data_down == 1:
+            Z = 1
+        if read_data_down == 0:
+            Z = 0
+
+        while Y == 1:
+            setpoint += 0.5
+            time.sleep(0.5)
+
+        while Z == 1:
+            setpoint -= 0.5
+            time.sleep(0.5)
+        return setpoint    
+    @staticmethod
+    def pin_config_tempcontrol(my_board):
+        my_board.set_pin_mode_digital_input(2)  # increase setpoint
+        my_board.set_pin_mode_digital_input(3)  # decrease setpoint
+        my_board.set_pin_mode_digital_input(17)  # switch between heating and cooling
+        
+    @staticmethod
+    def heating(my_board, temperature, setpoint):
+        read_data_control = my_board.digital_read(17)
+        
+        
+        #if read_data_control == 1:
+        while temperature <= setpoint:
+            time.sleep(3)
+            call_for_heat = 1
+            return call_for_heat
+
+    @staticmethod
+    def cooling(my_board, temperature, setpoint):
+        read_data_control = my_board.digital_read(17)
+        
+        #if read_data_control == 0:
+        while temperature >= setpoint:
+            time.sleep(3)
+            call_for_cool = 1
+            return call_for_cool
+
+
+# Create an instance of TempSection
+temp_section = TempSection()
+temp_compare = TempCompare()
+# Configure the board pins
+temp_section.pin_config(board)
+temp_compare.pin_config_tempcontrol(board)
+
+# Read the temperature
+temperature = temp_section.read_temp(board)
+
+
+setpoint = 21
+
+run = 1
+
+# Change the setpoint based on input
+setpoint = temp_compare.change_setpoint(board, setpoint)
+
+operation_cool = temp_compare.cooling(board, temperature, setpoint)
+operation_heat = temp_compare.heating(board, temperature, setpoint)
+
+
+
+while run == 1:
+    temperature = temp_section.read_temp(board)
+    setpoint = temp_compare.change_setpoint(board, setpoint)
+    operation_cool = temp_compare.cooling(board, temperature, setpoint)
+    operation_heat = temp_compare.heating(board, temperature, setpoint)
+    print(temperature, setpoint ,operation_heat, operation_cool)
