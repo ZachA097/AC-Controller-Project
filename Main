@@ -8,7 +8,6 @@ class TempSection:
     
     @staticmethod
     def pin_config(my_board):
-        # Use the provided pin numbers directly, no need to assign them to variables
         my_board.set_pin_mode_digital_input(14)  # Max_6675_SO
         my_board.set_pin_mode_digital_output(15)  # Max_6675_CS
         my_board.set_pin_mode_digital_output(16)  # MAX_6675_SCK
